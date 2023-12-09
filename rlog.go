@@ -14,16 +14,17 @@ type Logger struct {
 }
 
 type Config struct {
-	File     string
-	Read     func() []string
-	Interval time.Duration
-	Print    func(v ...any)
+	File         string
+	Read         func() []string
+	Interval     time.Duration
+	Print        func(v ...any)
+	DefaultRules []string
 }
 
 var (
 	inited                  = false
 	configed                = false
-	rules                   = []string{}
+	rules                   = []string{"default"}
 	ruleFile                = "./rlog"
 	print    func(v ...any) = log.Println
 )
@@ -84,6 +85,9 @@ func Init(cfg *Config) {
 		}
 		if cfg.File != "" {
 			ruleFile = cfg.File
+		}
+		if cfg.DefaultRules != nil {
+			rules = cfg.DefaultRules
 		}
 	}
 
