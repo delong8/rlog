@@ -104,18 +104,18 @@ func New(name string) Logger {
 }
 
 func (l Logger) Error(v ...any) {
-	Error(v...)
+	print(prefix(true, 3, "ERROR", v...)...)
 }
 
 func (l Logger) Info(v ...any) {
 	Init(nil)
 	if enabled(l.name) {
-		print(prefix(false, l.name, v...)...)
+		print(prefix(false, 3, l.name, v...)...)
 	}
 }
 
 func Error(v ...any) {
-	print(prefix(true, "ERROR", v...)...)
+	print(prefix(true, 2, "ERROR", v...)...)
 }
 
 func Info(v ...any) {
@@ -123,7 +123,7 @@ func Info(v ...any) {
 	if !enabled("default") {
 		return
 	}
-	print(prefix(false, "INFO", v...)...)
+	print(prefix(false, 2, "INFO", v...)...)
 }
 
 func enabled(name string) bool {
@@ -141,8 +141,9 @@ func enabled(name string) bool {
 	return false
 }
 
-func prefix(err bool, tag string, v ...any) []any {
-	_, file, line, ok := runtime.Caller(2)
+func prefix(err bool, skip int, tag string, v ...any) []any {
+	_, file, line, ok := runtime.Caller(skip)
+
 	if !ok {
 		file = "???"
 		line = 0
