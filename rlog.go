@@ -104,7 +104,11 @@ func New(name string) Logger {
 }
 
 func (l Logger) Error(v ...any) {
-	print(prefix(true, 3, "ERROR", v...)...)
+	tag := "[ERROR]"
+	if l.name != "" {
+		tag += " " + l.name
+	}
+	print(prefix(true, 3, tag, v...)...)
 }
 
 func (l Logger) Info(v ...any) {
@@ -115,7 +119,7 @@ func (l Logger) Info(v ...any) {
 }
 
 func Error(v ...any) {
-	print(prefix(true, 2, "ERROR", v...)...)
+	print(prefix(true, 2, "[ERROR]", v...)...)
 }
 
 func Info(v ...any) {
@@ -128,9 +132,6 @@ func Info(v ...any) {
 
 func enabled(name string) bool {
 	for _, i := range rules {
-		if i == "true" {
-			return true
-		}
 		if i == "*" {
 			return true
 		}
@@ -153,7 +154,7 @@ func prefix(err bool, skip int, tag string, v ...any) []any {
 
 	t := []any{}
 	if err {
-		t = append(t, fmt.Sprintf("\x1b[91m[%s]\x1b[0m", tag))
+		t = append(t, fmt.Sprintf("\x1b[91m%s\x1b[0m", tag))
 	} else {
 		if tag == "" {
 			tag = "INFO"
