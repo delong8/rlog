@@ -29,7 +29,10 @@ var (
 	print    func(v ...any) = log.Println
 )
 
-// 初始化时一般直接配置 nil 既可
+/*
+Init is global function, give all instance default settings.
+if no special configs, `nil` will be fine.
+*/
 func Init(cfg *Config) {
 	if configed {
 		return
@@ -48,7 +51,12 @@ func Init(cfg *Config) {
 		f, err := os.Stat(ruleFile)
 
 		if os.IsNotExist(err) || f.IsDir() || f.Size() > 10_000 {
-			return []string{}
+			/*
+				if cfg file not exist, return current rules.
+				if DefaultRules has been set, read func will still return
+				DefaultRules, because `read` was started delayed
+			*/
+			return rules
 		}
 
 		bs, err := os.ReadFile(ruleFile)
@@ -99,10 +107,18 @@ func Init(cfg *Config) {
 	}()
 }
 
+/*
+create a new logger instance, every `Info` of this instance
+will contain a named prefix with param of New
+*/
 func New(name string) Logger {
 	return Logger{name: name}
 }
 
+/*
+give a error log, contain a glaring red [ERROR] symbol,
+and will always outprint in any log level
+*/
 func (l Logger) Error(v ...any) {
 	tag := "[ERROR]"
 	if l.name != "" {
@@ -118,6 +134,10 @@ func (l Logger) Info(v ...any) {
 	}
 }
 
+/*
+global error logger, without any configs, if you want give a error,
+just use `rlog.Error()`
+*/
 func Error(v ...any) {
 	print(prefix(true, 2, "[ERROR]", v...)...)
 }
