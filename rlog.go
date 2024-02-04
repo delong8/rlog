@@ -17,16 +17,17 @@ type Config struct {
 	File         string
 	Read         func() []string
 	Interval     time.Duration
-	Print        func(v ...any)
+	Output       func(v ...any)
 	DefaultRules []string
 }
 
 var (
-	inited                  = false
-	configed                = false
-	rules                   = []string{"default"}
-	ruleFile                = "./rlog"
-	print    func(v ...any) = log.Println
+	inited                      = false
+	configed                    = false
+	rules                       = []string{}
+	ruleFile                    = "./rlog"
+	defaultRules                = []string{"default"}
+	output       func(v ...any) = log.Println
 )
 
 /*
@@ -34,9 +35,11 @@ Init is global function, give all instance default settings.
 if no special configs, `nil` will be fine.
 */
 func Init(cfg *Config) {
+	// return if has been inited with not nil options
 	if configed {
 		return
 	}
+	// return if has been inited and current cfg is still nil
 	if inited && cfg == nil {
 		return
 	}
@@ -48,37 +51,12 @@ func Init(cfg *Config) {
 
 	interval := time.Duration(1 * time.Second)
 	read := func() []string {
-		f, err := os.Stat(ruleFile)
-
-		if os.IsNotExist(err) || f.IsDir() || f.Size() > 10_000 {
-			/*
-				if cfg file not exist, return current rules.
-				if DefaultRules has been set, read func will still return
-				DefaultRules, because `read` was started delayed
-			*/
+		rules, ok := defaultRead()
+		if ok {
 			return rules
+		} else {
+			return defaultRules
 		}
-
-		bs, err := os.ReadFile(ruleFile)
-		if err != nil {
-			Error(err)
-		}
-		lines := strings.Split(strings.ReplaceAll(
-			string(bs), "\r\n", "\n"), "\n")
-
-		m := map[string]bool{}
-		for _, line := range lines {
-			if line != "" {
-				m[line] = true
-			}
-		}
-
-		keys := make([]string, 0, len(m))
-		for k := range m {
-			keys = append(keys, k)
-		}
-
-		return keys
 	}
 
 	if cfg != nil {
@@ -88,16 +66,19 @@ func Init(cfg *Config) {
 		if cfg.Read != nil {
 			read = cfg.Read
 		}
-		if cfg.Print != nil {
-			print = cfg.Print
+		if cfg.Output != nil {
+			output = cfg.Output
 		}
 		if cfg.File != "" {
 			ruleFile = cfg.File
 		}
 		if cfg.DefaultRules != nil {
-			rules = cfg.DefaultRules
+			defaultRules = cfg.DefaultRules
 		}
 	}
+
+	// read init rules
+	rules = read()
 
 	go func() {
 		for {
@@ -124,13 +105,13 @@ func (l Logger) Error(v ...any) {
 	if l.name != "" {
 		tag += " " + l.name
 	}
-	print(prefix(true, 3, tag, v...)...)
+	output(prefix(true, 3, tag, v...)...)
 }
 
 func (l Logger) Info(v ...any) {
 	Init(nil)
 	if enabled(l.name) {
-		print(prefix(false, 3, l.name, v...)...)
+		output(prefix(false, 3, l.name, v...)...)
 	}
 }
 
@@ -139,7 +120,7 @@ global error logger, without any configs, if you want give a error,
 just use `rlog.Error()`
 */
 func Error(v ...any) {
-	print(prefix(true, 2, "[ERROR]", v...)...)
+	output(prefix(true, 2, "[ERROR]", v...)...)
 }
 
 func Info(v ...any) {
@@ -147,7 +128,7 @@ func Info(v ...any) {
 	if !enabled("default") {
 		return
 	}
-	print(prefix(false, 2, "INFO", v...)...)
+	output(prefix(false, 2, "INFO", v...)...)
 }
 
 func enabled(name string) bool {
@@ -184,4 +165,35 @@ func prefix(err bool, skip int, tag string, v ...any) []any {
 	t = append(t, p)
 	t = append(t, v...)
 	return t
+}
+
+func defaultRead() ([]string, bool) {
+	f, err := os.Stat(ruleFile)
+
+	if os.IsNotExist(err) || f.IsDir() || f.Size() > 1_000 {
+		return []string{}, false
+	}
+
+	bs, err := os.ReadFile(ruleFile)
+	if err != nil {
+		Error(err)
+		return []string{}, false
+	}
+	lines := strings.Split(strings.ReplaceAll(
+		string(bs), "\r\n", "\n"), "\n")
+
+	m := map[string]bool{}
+	for _, line := range lines {
+		// unique keys
+		if line != "" {
+			m[line] = true
+		}
+	}
+
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+
+	return keys, true
 }
