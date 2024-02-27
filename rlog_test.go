@@ -10,6 +10,7 @@ func Test_basic(t *testing.T) {
 	Info("basic info1")
 	time.Sleep(2 * time.Second)
 	Info("basic info2")
+	Info(Rules())
 }
 
 func Test_logger(t *testing.T) {
@@ -19,7 +20,6 @@ func Test_logger(t *testing.T) {
 }
 
 func Test_confg(t *testing.T) {
-
 	Init(&Config{
 		Read: func() []string {
 			return []string{"scope b"}

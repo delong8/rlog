@@ -89,6 +89,13 @@ func Init(cfg *Config) {
 }
 
 /*
+return current rules config
+*/
+func Rules() []string {
+	return rules
+}
+
+/*
 create a new logger instance, every `Info` of this instance
 will contain a named prefix with param of New
 */
