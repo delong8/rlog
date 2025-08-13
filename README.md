@@ -25,7 +25,7 @@ rlog 输出日志只有 2 个级别：
 或者
 
 ```sh
-go get github.com/DeronW/rlog
+go get github.com/delong8/rlog
 ```
 
 ### 基础用法
@@ -35,7 +35,7 @@ go get github.com/DeronW/rlog
 ```go
 package main
 
-import "github.com/DeronW/rlog"
+import "github.com/delong8/rlog"
 
 func main(){
     i := 0
@@ -68,7 +68,7 @@ error 12
 ```go
 package main
 
-import "github.com/DeronW/rlog"
+import "github.com/delong8/rlog"
 
 func main(){
 
@@ -82,7 +82,7 @@ func main(){
 ```go
 package main
 
-import "github.com/DeronW/rlog"
+import "github.com/delong8/rlog"
 
 func main(){
     la := rlog.New("a")
