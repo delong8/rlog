@@ -22,12 +22,13 @@ type Config struct {
 }
 
 var (
-	inited                      = false
-	configed                    = false
-	rules                       = []string{}
-	ruleFile                    = "./rlog"
-	defaultRules                = []string{"default"}
-	output       func(v ...any) = log.Println
+	inited       = false
+	configed     = false
+	rules        = []string{}
+	ruleFile     = "./rlog"
+	defaultRules = []string{"default"}
+	// format the output data
+	output func(v ...any) = log.Println
 )
 
 /*
