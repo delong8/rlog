@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,11 +23,14 @@ type Config struct {
 }
 
 var (
-	inited       = false
-	configed     = false
-	rules        = []string{}
-	ruleFile     = "./rlog"
-	defaultRules = []string{"default"}
+	mu             sync.RWMutex
+	inited         = false
+	configed       = false
+	rules          = []string{}
+	ruleFile       = "./rlog"
+	defaultRules   = []string{"default"}
+	readRules      func() []string
+	pollingStarted = false
 	// format the output data
 	output func(v ...any) = log.Println
 )
@@ -36,36 +40,25 @@ Init is global function, give all instance default settings.
 if no special configs, `nil` will be fine.
 */
 func Init(cfg *Config) {
-	// return if has been inited with not nil options
+	interval := time.Duration(1 * time.Second)
+	read := defaultReadRules
+	startPolling := false
+
+	mu.Lock()
 	if configed {
+		mu.Unlock()
 		return
 	}
-	// return if has been inited and current cfg is still nil
 	if inited && cfg == nil {
+		mu.Unlock()
 		return
 	}
 
 	inited = true
 	if cfg != nil {
 		configed = true
-	}
-
-	interval := time.Duration(1 * time.Second)
-	read := func() []string {
-		rules, ok := defaultRead()
-		if ok {
-			return rules
-		} else {
-			return defaultRules
-		}
-	}
-
-	if cfg != nil {
 		if cfg.Interval > interval {
 			interval = cfg.Interval
-		}
-		if cfg.Read != nil {
-			read = cfg.Read
 		}
 		if cfg.Output != nil {
 			output = cfg.Output
@@ -74,26 +67,55 @@ func Init(cfg *Config) {
 			ruleFile = cfg.File
 		}
 		if cfg.DefaultRules != nil {
-			defaultRules = cfg.DefaultRules
+			defaultRules = copyStrings(cfg.DefaultRules)
 		}
+		if cfg.Read != nil {
+			read = cfg.Read
+		}
+		readRules = read
+	} else {
+		if readRules == nil {
+			readRules = defaultReadRules
+		}
+		read = readRules
 	}
+	if !pollingStarted {
+		pollingStarted = true
+		startPolling = true
+	}
+	mu.Unlock()
 
-	// read init rules
-	rules = read()
+	setRules(read())
 
-	go func() {
-		for {
-			time.Sleep(interval)
-			rules = read()
+	if startPolling {
+		go pollRules(interval)
+	}
+}
+
+func pollRules(interval time.Duration) {
+	for {
+		time.Sleep(interval)
+		read := getReadRules()
+		if read == nil {
+			continue
 		}
-	}()
+		setRules(read())
+	}
+}
+
+func defaultReadRules() []string {
+	rules, ok := defaultRead()
+	if ok {
+		return rules
+	}
+	return getDefaultRules()
 }
 
 /*
 return current rules config
 */
 func Rules() []string {
-	return rules
+	return getRules()
 }
 
 /*
@@ -113,13 +135,15 @@ func (l Logger) Error(v ...any) {
 	if l.name != "" {
 		tag += " " + l.name
 	}
-	output(prefix(true, 3, tag, v...)...)
+	out := getOutput()
+	out(prefix(true, 3, tag, v...)...)
 }
 
 func (l Logger) Info(v ...any) {
 	Init(nil)
 	if enabled(l.name) {
-		output(prefix(false, 3, l.name, v...)...)
+		out := getOutput()
+		out(prefix(false, 3, l.name, v...)...)
 	}
 }
 
@@ -128,7 +152,8 @@ global error logger, without any configs, if you want give a error,
 just use `rlog.Error()`
 */
 func Error(v ...any) {
-	output(prefix(true, 2, "[ERROR]", v...)...)
+	out := getOutput()
+	out(prefix(true, 2, "[ERROR]", v...)...)
 }
 
 func Info(v ...any) {
@@ -136,11 +161,12 @@ func Info(v ...any) {
 	if !enabled("default") {
 		return
 	}
-	output(prefix(false, 2, "INFO", v...)...)
+	out := getOutput()
+	out(prefix(false, 2, "INFO", v...)...)
 }
 
 func enabled(name string) bool {
-	for _, i := range rules {
+	for _, i := range getRules() {
 		if i == "*" {
 			return true
 		}
@@ -149,6 +175,54 @@ func enabled(name string) bool {
 		}
 	}
 	return false
+}
+
+func getRules() []string {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	return copyStrings(rules)
+}
+
+func setRules(next []string) {
+	copied := copyStrings(next)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	rules = copied
+}
+
+func getOutput() func(v ...any) {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	return output
+}
+
+func getReadRules() func() []string {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	return readRules
+}
+
+func getDefaultRules() []string {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	return copyStrings(defaultRules)
+}
+
+func getRuleFile() string {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	return ruleFile
+}
+
+func copyStrings(values []string) []string {
+	return append([]string(nil), values...)
 }
 
 func prefix(err bool, skip int, tag string, v ...any) []any {
@@ -176,13 +250,21 @@ func prefix(err bool, skip int, tag string, v ...any) []any {
 }
 
 func defaultRead() ([]string, bool) {
-	f, err := os.Stat(ruleFile)
+	path := getRuleFile()
+	f, err := os.Stat(path)
 
-	if os.IsNotExist(err) || f.IsDir() || f.Size() > 1_000 {
+	if os.IsNotExist(err) {
+		return []string{}, false
+	}
+	if err != nil {
+		Error(err)
+		return []string{}, false
+	}
+	if f.IsDir() || f.Size() > 1_000 {
 		return []string{}, false
 	}
 
-	bs, err := os.ReadFile(ruleFile)
+	bs, err := os.ReadFile(path)
 	if err != nil {
 		Error(err)
 		return []string{}, false

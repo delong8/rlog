@@ -2,10 +2,17 @@
 
 最近以 docker 镜像为产物的项目中，原本使用了 logrus 作为日志工具，实际当中，用得最多的是在客户运行环境中检查日志，希望能临时开启日志，不用的时候不用输出日志，避免占用太多磁盘空间，实际上大部分客户的容器只要输出 Error 即可，标准日志级别（Debug、Info、Warn、Error）在微服务中也完全用不上。
 
+### 开发命令
+
 ```sh
-# 执行单元测试
 go test
+go test -run TestGlobalInfoUsesDefaultRulesAfterLazyInit
+go build ./...
+go vet ./...
+gofmt -l .
 ```
+
+全局规则同步问题修复后，最终验证也运行 `go test -race -count=1 ./...`。
 
 Golang 运行时动态决定是否要输出 log，输出那些 log，不用重启服务。
 
@@ -35,7 +42,11 @@ go get github.com/delong8/rlog
 ```go
 package main
 
-import "github.com/delong8/rlog"
+import (
+    "time"
+
+    "github.com/delong8/rlog"
+)
 
 func main(){
     i := 0
@@ -65,16 +76,6 @@ info 12
 error 12
 ...
 
-```go
-package main
-
-import "github.com/delong8/rlog"
-
-func main(){
-
-}
-```
-
 ### 高级用法
 
 设置日志范围，先创建带名字的 logger，然后想输出哪些日志，就在 rlog 中添加 logger 的名字。
@@ -82,7 +83,11 @@ func main(){
 ```go
 package main
 
-import "github.com/delong8/rlog"
+import (
+    "time"
+
+    "github.com/delong8/rlog"
+)
 
 func main(){
     la := rlog.New("a")
@@ -113,25 +118,38 @@ func main(){
 可以手动执行 `rlog.Init` 来进行全局设置，在调用其它方法前设置且仅设置一次。
 
 ```go
-cfg := &rlog.Config{
-    File: "/app/log_config",
-    Read: func(){
-        return "*"
-    },
-    Interval: time.Duration(time.Minute),
-    Print: func(v ...any){
-        fmt.Println(v)
-    },
+package main
+
+import (
+    "fmt"
+    "time"
+
+    "github.com/delong8/rlog"
+)
+
+func main(){
+    cfg := &rlog.Config{
+        File: "/app/log_config",
+        Read: func() []string{
+            return []string{"*"}
+        },
+        DefaultRules: []string{"default"},
+        Interval: time.Duration(time.Minute),
+        Output: func(v ...any){
+            fmt.Println(v...)
+        },
+    }
+    rlog.Init(cfg)
 }
-rlog.Init(cfg)
 ```
 
-| 参数     | 默认值                                        | 说明                         |
-| -------- | --------------------------------------------- | ---------------------------- |
-| File     | "./rlog"                                      | 用于配置日志输出范围的文件   |
-| Read     | os.Read(File)                                 | 查询日志输出范围时调用的方法 |
-| Interval | 1s                                            | 获取日志范围变化的时间间隔   |
-| Print    | [log.Println](https://pkg.go.dev/log#Println) | 日志输出位置                 |
+| 参数         | 默认值                                        | 说明                                      |
+| ------------ | --------------------------------------------- | ----------------------------------------- |
+| File         | "./rlog"                                      | 用于配置日志输出范围的文件                |
+| Read         | 读取 File 文件并返回 `[]string`               | 查询日志输出范围时调用的方法              |
+| DefaultRules | []string{"default"}                          | Read 无法从 File 读取规则时使用的默认范围 |
+| Interval     | 1s                                            | 获取日志范围变化的时间间隔                |
+| Output       | [log.Println](https://pkg.go.dev/log#Println) | 日志输出位置                              |
 
 参数被调用顺序说明
 
@@ -141,4 +159,4 @@ rlog.Init(cfg)
 3. 如果 File 参数未配置，默认在运行项目的目录寻找 rlog 文件
 4. 将 rlog 文件中的内容按行分隔，每一行表示允许输出的日志的 logger 的名字。包中不需要初始化的 `rlog.Info` 方法对应的名字是 "default"
 5. 当通过 `rlog.New` 方法创建出来的 logger 调用了 Info 方法时，先去查看 logger 的 name 是否前缀包含 Read 方法返回的列表中的任意一项，如果满足条件，则输出内容，否则不输出。
-6. 所有输出内容会传给 Print 参数配置的方法。
+6. 所有输出内容会传给 Output 参数配置的方法。
